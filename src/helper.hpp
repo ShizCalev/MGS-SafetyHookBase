@@ -1,7 +1,13 @@
-#include "stdafx.h"
-#include <stdio.h>
+#include <spdlog/spdlog.h>
 
-using namespace std;
+
+#pragma comment(lib,"Version.lib")
+
+extern std::string foundPath;
+extern HMODULE baseModule;
+extern std::filesystem::path sExePath;
+extern std::filesystem::path sFixPath;
+extern std::string sExeName;
 
 namespace Memory
 {
@@ -31,11 +37,18 @@ namespace Memory
         return len ? (HMODULE)info.AllocationBase : NULL;
     }
 
-    uint32_t ModuleTimestamp(void* module)
+    std::string GetModuleVersion(void* module)
     {
         auto dosHeader = (PIMAGE_DOS_HEADER)module;
         auto ntHeaders = (PIMAGE_NT_HEADERS)((std::uint8_t*)module + dosHeader->e_lfanew);
-        return ntHeaders->FileHeader.TimeDateStamp;
+        std::time_t time = ntHeaders->FileHeader.TimeDateStamp;
+        // Extract date components
+        std::tm* time_info = std::localtime(&time);
+        int year = time_info->tm_year + 1900; // Years since 1900
+        int month = time_info->tm_mon + 1;    // Months since January (0-11)
+        int day = time_info->tm_mday;
+
+        return std::to_string(year) + "-" + std::to_string(month) + "-" + std::to_string(day);
     }
 
     // CSGOSimple's pattern scan
@@ -156,6 +169,82 @@ namespace Util
 
         return {};
     }
+
+    std::string GetFileDescription(const std::string& filePath)
+    {
+        DWORD handle = 0;
+        DWORD size = GetFileVersionInfoSizeA(filePath.c_str(), &handle);
+        if (size > 0)
+        {
+            std::vector<BYTE> versionInfo(size);
+            if (GetFileVersionInfoA(filePath.c_str(), handle, size, versionInfo.data()))
+            {
+                void* buffer = nullptr;
+                UINT sizeBuffer = 0;
+                if (VerQueryValueA(versionInfo.data(), R"(\VarFileInfo\Translation)", &buffer, &sizeBuffer))
+                {
+                    auto translations = static_cast<WORD*>(buffer);
+                    size_t translationCount = sizeBuffer / sizeof(WORD) / 2; // Each translation is two WORDs (language and code page)
+                    for (size_t i = 0; i < translationCount; ++i)
+                    {
+                        WORD language = translations[i * 2];
+                        WORD codePage = translations[i * 2 + 1];
+                        // Construct the query string for the file description
+                        std::ostringstream subBlock;
+                        subBlock << R"(\StringFileInfo\)" << std::hex << std::setw(4) << std::setfill('0') << language
+                            << std::setw(4) << std::setfill('0') << codePage << R"(\ProductName)";
+                        if (VerQueryValueA(versionInfo.data(), subBlock.str().c_str(), &buffer, &sizeBuffer))
+                        {
+                            return std::string(static_cast<char*>(buffer), sizeBuffer - 1);
+                        }
+                    }
+                }
+            }
+        }
+        return "File description not found.";
+    }
+
+
+    ///Scans all valid ASI directories for any .asi files matching the fileName.
+    bool CheckForASIFiles(std::string fileName, bool checkForDuplicates, bool setFixPath)
+    {
+        std::array<std::string, 4> paths = { "", "plugins", "scripts", "update" };
+        std::filesystem::path foundPath;
+        for (const auto& path : paths)
+        {
+            if (std::filesystem::exists(sExePath / path / (fileName + ".asi")))
+            {
+                if (!foundPath.empty()) //multiple versions found
+                {
+                    AllocConsole();
+                    FILE* dummy;
+                    freopen_s(&dummy, "CONOUT$", "w", stdout);
+                    std::string errorMessage = "DUPLICATE FILE ERROR: Duplicate " + fileName + ".asi installations found! Please make sure to delete any old versions!\n";
+                    if (foundPath == "\\")
+                    {
+                        foundPath = ""; //don't print the extra slash
+                    }
+                    errorMessage.append("DUPLICATE FILE ERROR - Installation 1: ").append((sExePath / foundPath / (fileName + ".asi\n")).string());
+                    errorMessage.append("DUPLICATE FILE ERROR - Installation 2: ").append((sExePath / path / (fileName + ".asi\n")).string());
+                    std::cout << errorMessage << std::endl;
+                    spdlog::error("{}", errorMessage);
+                    FreeLibraryAndExitThread(baseModule, 1);
+                }
+
+                foundPath = path;
+                if (setFixPath)
+                {
+                    sFixPath = foundPath;
+                }
+                if (!checkForDuplicates)
+                {
+                    return TRUE;
+                }
+            }
+        }
+        return FALSE;
+    }
+
 }
 
 inline void**& GetVirtualTable(void* baseclass) {

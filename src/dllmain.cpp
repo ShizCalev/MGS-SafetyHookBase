@@ -8,23 +8,30 @@
 #include <spdlog/sinks/base_sink.h>
 #include <safetyhook.hpp>
 
+
+//Only utilize for primary game fix mods, don't bother logging all this stuff if we're just a standard mod since it just bloats the log file.
+#ifndef PRIMARY_FIX_MOD
+//#define PRIMARY_FIX_MOD
+#endif
+
+
 HMODULE baseModule = GetModuleHandle(NULL);
 
 // Version
-string sFixName = "MGS-SafetyHookBase";
-string sFixVer = "1.0.0";
+std::string sFixName = "MGS-SafetyHookBase";
+std::string sFixVer = "1.0.0";
 
 // Logger
 std::shared_ptr<spdlog::logger> logger;
-std::string sLogFile = sFixName + ".log";
+std::filesystem::path sLogFile = sFixName + ".log";
 std::filesystem::path sExePath;
 std::string sExeName;
-std::string sFixPath;
+std::filesystem::path sFixPath;
 
 
 // Ini
 inipp::Ini<char> ini;
-std::string sConfigFile = sFixName + ".ini";
+std::filesystem::path sConfigFile = sFixName + ".ini";
 
 
 // Ini Variables
@@ -37,23 +44,25 @@ struct GameInfo
     int SteamAppId;
 };
 
-enum class MgsGame
+enum MgsGame : std::uint8_t
 {
-    Unknown,
-    MGS2,
-    MGS3,
-    MG,
-    Launcher
+    NONE = 0,
+    MGS2 = 1 << 0,
+    MGS3 = 1 << 1,
+    MG = 1 << 2,
+    LAUNCHER = 1 << 3,
+    UNKNOWN = 1 << 4
 };
 
 const std::map<MgsGame, GameInfo> kGames = {
-    {MgsGame::MGS2, {"Metal Gear Solid 2 HD", "METAL GEAR SOLID2.exe", 2131640}},
-    {MgsGame::MGS3, {"Metal Gear Solid 3 HD", "METAL GEAR SOLID3.exe", 2131650}},
-    {MgsGame::MG, {"Metal Gear / Metal Gear 2 (MSX)", "METAL GEAR.exe", 2131680}},
+    {MGS2, {"Metal Gear Solid 2 HD", "METAL GEAR SOLID2.exe", 2131640}},
+    {MGS3, {"Metal Gear Solid 3 HD", "METAL GEAR SOLID3.exe", 2131650}},
+    {MG, {"Metal Gear / Metal Gear 2 (MSX)", "METAL GEAR.exe", 2131680}},
 };
 
+
 const GameInfo* game = nullptr;
-MgsGame eGameType = MgsGame::Unknown;
+MgsGame eGameType = UNKNOWN;
 
 #pragma region Logging
 
@@ -113,10 +122,10 @@ void Logging()
     sExeName = sExePath.filename().string();
     sExePath = sExePath.remove_filename();
 
-    std::string paths[4] = { "\\", "update\\", "plugins\\", "scripts\\" };
-    for (int i = 0; i < (sizeof(paths) / sizeof(paths[0])); i++) 
+    std::array<std::string, 4> paths = { "", "plugins", "scripts", "update" };
+    for (const auto& path : paths)
     {
-        if (std::filesystem::exists(sExePath.string() + paths[i] + sFixName + ".asi")) 
+        if (std::filesystem::exists(sExePath / path / (sFixName + ".asi")))
         {
             if (!sFixPath.empty()) { //multiple versions found
                 AllocConsole();
@@ -125,32 +134,40 @@ void Logging()
                 std::cout << "\n" << sFixName + " ERROR: Duplicate .asi installations found! Please make sure to delete any old versions!" << std::endl;
                 FreeLibraryAndExitThread(baseModule, 1);
             }
-            sFixPath = paths[i];
+            sFixPath = path;
         }
     }
     // spdlog initialisation
     {
         try {
-            if (!std::filesystem::is_directory(sExePath.string() + "logs"))
-                std::filesystem::create_directory(sExePath.string() + "logs"); //create a "logs" subdirectory in the game folder to keep the main directory tidy.
+            bool logDirExists = std::filesystem::is_directory(sExePath / "logs");
+            if (!logDirExists)
+            {
+                std::filesystem::create_directory(sExePath / "logs"); //create a "logs" subdirectory in the game folder to keep the main directory tidy.
+            }
             // Create 10MB truncated logger
-            logger = std::make_shared<spdlog::logger>(sLogFile, std::make_shared<size_limited_sink<std::mutex>>(sExePath.string() + "logs\\" + sLogFile, 10 * 1024 * 1024));
+            logger = std::make_shared<spdlog::logger>(sLogFile.string(), std::make_shared<size_limited_sink<std::mutex>>((sExePath / "logs" / sLogFile).string(), 10 * 1024 * 1024));
             spdlog::set_default_logger(logger);
 
             spdlog::flush_on(spdlog::level::debug);
+            spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+            if (!logDirExists)
+            {
+                spdlog::info("----------");
+                spdlog::info("New log subdirectory created.");
+            }
             spdlog::info("----------");
-            spdlog::info("{} v{} loaded.", sFixName.c_str(), sFixVer.c_str());
-            spdlog::info("ASI Plugin location: {}", sExePath.string() + sFixPath + sFixName + ".asi");
+            spdlog::info("{} v{} loaded.", sFixName, sFixVer); 
+            spdlog::info("ASI plugin location: {}", (sExePath / sFixPath / (sFixName + ".asi")).string());
             spdlog::info("----------");
-            spdlog::info("Log file: {}", sExePath.string() + "logs\\" + sLogFile);
+            spdlog::info("Log file: {}", (sExePath / "logs" / sLogFile).string());
             spdlog::info("----------");
 
             // Log module details
             spdlog::info("Module Name: {0:s}", sExeName.c_str());
             spdlog::info("Module Path: {0:s}", sExePath.string());
             spdlog::info("Module Address: 0x{0:x}", (uintptr_t)baseModule);
-            spdlog::info("Module Timestamp: {0:d}", Memory::ModuleTimestamp(baseModule));
-            spdlog::info("----------");
+            spdlog::info("Module Version: {}", Memory::GetModuleVersion(baseModule));
         }
         catch (const spdlog::spdlog_ex& ex) {
             AllocConsole();
@@ -163,22 +180,100 @@ void Logging()
 }
 #pragma endregion Logging
 
+#ifdef PRIMARY_FIX_MOD
+///Prints CPU, GPU, and RAM info to the log to expedite common troubleshooting.
+void Init_LogSysInfo()
+{
+#ifndef _WIN32
+    spdlog::info("System Details - Steam Deck/Linux");
+    return;
+#endif
 
-void ReadConfig()
+
+    std::array<int, 4> integerBuffer = {};
+    constexpr size_t sizeofIntegerBuffer = sizeof(int) * integerBuffer.size();
+    std::array<char, 64> charBuffer = {};
+    std::array<std::uint32_t, 3> functionIds = {
+        0x8000'0002, // Manufacturer  
+        0x8000'0003, // Model 
+        0x8000'0004  // Clock-speed
+    };
+
+    std::string cpu;
+    for (int id : functionIds)
+    {
+        __cpuid(integerBuffer.data(), id);
+        std::memcpy(charBuffer.data(), integerBuffer.data(), sizeofIntegerBuffer);
+        cpu += std::string(charBuffer.data());
+    }
+
+    spdlog::info("System Details - CPU: {}", cpu);
+
+    std::string deviceString;
+    for (int i = 0; ; i++)
+    {
+        DISPLAY_DEVICE dd = { sizeof(dd), 0 };
+        BOOL f = EnumDisplayDevices(NULL, i, &dd, EDD_GET_DEVICE_INTERFACE_NAME);
+        if (!f)
+        {
+            break; //that's all, folks.
+        }
+        char deviceStringBuffer[128];
+        WideCharToMultiByte(CP_UTF8, 0, dd.DeviceString, -1, deviceStringBuffer, sizeof(deviceStringBuffer), NULL, NULL);
+        if (deviceString == deviceStringBuffer) //each monitor reports what gpu is driving it, lets just double check in case we're looking at a laptop with mixed usage.
+        {
+            continue;
+        }
+        deviceString = deviceStringBuffer;
+        spdlog::info("System Details - GPU: {}", deviceString);
+    }
+
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    GlobalMemoryStatusEx(&status);
+    double totalMemory = status.ullTotalPhys / 1024 / 1024;    ///Total physical RAM in MB.
+    spdlog::info("System Details - RAM: {} GB ({} MB)", ceil((totalMemory / 1024) * 100) / 100, totalMemory);
+}
+
+void Init_ASILoaderSanityChecks()
+{
+    //Don't simplify by removing filesystem::exists() from this check. While GetFileDescription does handle non-existent files own its own, checking filesystem::exists() first saves 400+ ms of initialization time
+    if (std::filesystem::exists(sExePath / "d3d11.dll") && (Util::GetFileDescription((sExePath / "d3d11.dll").string()) == Util::GetFileDescription((sExePath / "winhttp.dll").string())))
+    {
+        AllocConsole();
+        FILE* dummy;
+        freopen_s(&dummy, "CONOUT$", "w", stdout);
+        std::cout << "DUPLICATE MOD LOADER ERROR: Multiple ASI Loader .dll's detected! This can cause inconsistent bugs and crashes.\n";
+        spdlog::error("DUPLICATE MOD LOADER ERROR: Multiple ASI Loader .dll installations detected! This can cause inconsistent bugs and crashes.");
+        std::cout << "DUPLICATE MOD LOADER ERROR: Please delete d3d11.dll, it has been replaced by winhttp.dll & wininit.dll.\n";
+        spdlog::error("DUPLICATE MOD LOADER ERROR: Please delete d3d11.dll, it has been replaced by winhttp.dll & wininit.dll.");
+#ifndef _WIN32
+        std::cout << "DUPLICATE MOD LOADER ERROR: Steam Deck / Linux users must also replace their Steam game launch paramaters with the following command:\n";
+        spdlog::error("DUPLICATE MOD LOADER ERROR: Steam Deck / Linux users must also replace their Steam game launch paramaters with the following command:");
+        std::cout << "`WINEDLLOVERRIDES=\"wininet,winhttp=n,b\" % command % `\n";
+        spdlog::error("`WINEDLLOVERRIDES=\"wininet,winhttp=n,b\" % command % `");
+#endif
+        spdlog::info("----------");
+    }
+    Util::CheckForASIFiles(sFixName, true, true); //Exit thread & warn the user if multiple copies of MGSHDFix are trying to initialize.
+}
+#endif
+
+void Init_ReadConfig()
 {
     // Initialise config
-    std::ifstream iniFile(sExePath.string() + sFixPath + sConfigFile);
+    std::ifstream iniFile((sExePath / sFixPath / sConfigFile));
     if (!iniFile) {
         AllocConsole();
         FILE* dummy;
         freopen_s(&dummy, "CONOUT$", "w", stdout);
-        std::cout << "" << sFixName.c_str() << " v" << sFixVer.c_str() << " loaded." << std::endl;
+        std::cout << "" << sFixName << " v" << sFixVer << " loaded." << std::endl;
         std::cout << "ERROR: Could not locate config file." << std::endl;
-        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sExePath.string().c_str() + sFixPath << std::endl;
+        std::cout << "ERROR: Make sure " << sConfigFile << " is located in " << sExePath / sFixPath << std::endl;
         FreeLibraryAndExitThread(baseModule, 1);
     }
     else {
-        spdlog::info("Config file: {}", sExePath.string() + sFixPath + sConfigFile);
+        spdlog::info("Config file: {}", (sExePath / sFixPath / sConfigFile).string());
         ini.parse(iniFile);
     }
 
@@ -191,7 +286,7 @@ void ReadConfig()
 
 bool DetectGame()
 {
-    eGameType = MgsGame::Unknown;
+    eGameType = UNKNOWN;
     // Special handling for launcher.exe
     if (sExeName == "launcher.exe")
     {
@@ -201,12 +296,11 @@ bool DetectGame()
             if (std::filesystem::exists(gamePath))
             {
                 spdlog::info("Detected launcher for game: {} (app {})", info.GameTitle.c_str(), info.SteamAppId);
-                eGameType = MgsGame::Launcher;
+                eGameType = LAUNCHER;
                 game = &info;
-                return true;
+                return false;
             }
         }
-
         spdlog::error("Failed to detect supported game, unknown launcher");
         return false;
     }
@@ -227,9 +321,9 @@ bool DetectGame()
 }
 
 
-void Main()
+void Init_Main()
 { 
-    /*if ((eGameType == MgsGame::MGS2 || eGameType == MgsGame::MGS3 || eGameType == MgsGame::MG))
+    /*if ((eGameType & (MGS2 | MGS3 | MG))
     {
         
     } 
@@ -287,6 +381,58 @@ void Main()
     }
 }
 
+std::string lastLoaded;
+std::chrono::time_point<std::chrono::high_resolution_clock> initStartTime;
+
+#define INITIALIZE(func) \
+    do { \
+        std::chrono::time_point<std::chrono::high_resolution_clock> currentInitPhaseStartTime;\
+        if(strcmp(#func,"InitializeSubsystems()") == 0) \
+        {\
+            spdlog::info("---------- Subsystem initialization started ----------", #func); \
+            currentInitPhaseStartTime = initStartTime;\
+        }\
+        else if(!lastLoaded.empty())\
+        {\
+            spdlog::info("---------- {}\tNow loading: {} ----------", lastLoaded, #func); \
+            currentInitPhaseStartTime = std::chrono::high_resolution_clock::now();\
+        }\
+        else\
+        {\
+            spdlog::info("---------- Loading: {} ----------", #func); \
+            currentInitPhaseStartTime = std::chrono::high_resolution_clock::now();\
+        }\
+        (func); \
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - currentInitPhaseStartTime).count();\
+        if(strcmp(#func,"InitializeSubsystems()") == 0) \
+        {\
+            if(!lastLoaded.empty())\
+            {\
+                spdlog::info("---------- {} ----------", lastLoaded); \
+            }\
+            spdlog::info("---------- All systems completed loading in: {} ms. ----------", duration); \
+        }\
+        else\
+        {\
+            lastLoaded = std::string(#func) + " loaded in: " + std::to_string(duration) + " ms."; \
+        }\
+    } while (0)
+
+void InitializeSubsystems()
+{
+#ifdef PRIMARY_FIX_MOD
+    INITIALIZE(Init_LogSysInfo());
+    INITIALIZE(Init_ASILoaderSanityChecks());
+#endif
+    if (DetectGame())
+    {
+        INITIALIZE(Init_ReadConfig());
+#ifdef PRIMARY_FIX_MOD
+        INITIALIZE(Init_FixDPIScaling()); //Needs to be anywhere before the window is created.
+#endif
+        INITIALIZE(Init_Main());
+    }
+}
 
 std::mutex mainThreadFinishedMutex;
 std::condition_variable mainThreadFinishedVar;
@@ -294,13 +440,9 @@ bool mainThreadFinished = false;
 
 DWORD __stdcall Main(void*)
 {
+    initStartTime = std::chrono::high_resolution_clock::now();
     Logging();
-    ReadConfig();
-    if (DetectGame())
-    {
-        Main();
-    }
-
+    INITIALIZE(InitializeSubsystems());
     // Signal any threads which might be waiting for us before continuing
     {
         std::lock_guard lock(mainThreadFinishedMutex);
