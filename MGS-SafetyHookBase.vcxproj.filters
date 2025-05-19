@@ -1,0 +1,169 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\resources\d3d11_api.cpp">
+      <Filter>APIs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\gamevars.cpp">
+      <Filter>APIs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\helper.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="src\dllmain.cpp" />
+    <ClCompile Include="src\warnings\asi_loader_checks.cpp">
+      <Filter>Warnings</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\logging.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\allocator.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\easy.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\inline_hook.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\mid_hook.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\os.linux.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\os.windows.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\utility.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="external\safetyhook\src\vmt_hook.cpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\steamworks_api.cpp">
+      <Filter>APIs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\version_checking.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\submodule_initiailization.hpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\gpu_check.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="src\resources\config.cpp">
+      <Filter>Config</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\warnings\asi_loader_checks.hpp">
+      <Filter>Warnings\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\common.hpp">
+      <Filter>Utility\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\helper.hpp">
+      <Filter>Utility\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\logging.hpp">
+      <Filter>Utility\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\stdafx.h">
+      <Filter>Utility\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="external\safetyhook\include\safetyhook.hpp">
+      <Filter>Utility\Safetyhook</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\gamevars.hpp">
+      <Filter>APIs\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\d3d11_api.hpp">
+      <Filter>APIs\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\steamworks_api.hpp">
+      <Filter>APIs\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\version_checking.hpp">
+      <Filter>Utility\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\version.h">
+      <Filter>Resources</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\gpu_check.hpp">
+      <Filter>Utility\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\RegStateHelpers.hpp">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\steam_achievements.hpp">
+      <Filter>APIs\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\resources\config.hpp">
+      <Filter>Config</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md">
+      <Filter>Resources</Filter>
+    </None>
+    <None Include="MGS-SafetyHookBase.ini">
+      <Filter>Resources</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Fixes">
+      <UniqueIdentifier>{bd2458c5-47ae-4124-832d-713ce24b26ca}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Features">
+      <UniqueIdentifier>{f87fe3af-588a-4513-95d0-fe5158c2e0ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{9e661797-fd7d-422f-845a-a1101bcd6f30}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utility">
+      <UniqueIdentifier>{e7e651f5-92ec-4540-86a7-9622adfc5a53}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="APIs">
+      <UniqueIdentifier>{99e51cdd-825e-416d-a43f-14b1be6b1d4b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="WIP">
+      <UniqueIdentifier>{bf88c80f-7def-446d-918f-ef7f741e166e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fixes\Headers">
+      <UniqueIdentifier>{320f3743-9db3-4af8-b538-4974ac376736}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Features\Headers">
+      <UniqueIdentifier>{f416336a-4a1b-4e1a-a381-576c023ade60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Warnings">
+      <UniqueIdentifier>{1de08177-9755-4f9c-b903-d4a823886cd6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Warnings\Headers">
+      <UniqueIdentifier>{610579ef-701e-42d8-afd2-de9d428b0b17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utility\Headers">
+      <UniqueIdentifier>{d0180c24-b496-4966-84d1-635769f94018}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utility\Safetyhook">
+      <UniqueIdentifier>{c4a23fae-fd9c-41b0-9772-dda7af79f97c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="APIs\Headers">
+      <UniqueIdentifier>{a3100db6-b5f8-4b1a-96dc-23576666050c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Config">
+      <UniqueIdentifier>{cd1768eb-087f-41c0-a320-8702dca4749f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="src\resources\afevis-mods.ico">
+      <Filter>Resources</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\resources\afevis.rc">
+      <Filter>Resources</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,65 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Extract version from version.h
+      id: extract_version
+      shell: bash
+      run: |
+        VERSION_FILE="src/resources/version.h"
+        echo "Reading version from $VERSION_FILE"
+
+        VERSION_MAJOR=$(grep '#define VERSION_MAJOR' "$VERSION_FILE" | awk '{print $3}')
+        VERSION_MINOR=$(grep '#define VERSION_MINOR' "$VERSION_FILE" | awk '{print $3}')
+        VERSION_PATCH=$(grep '#define VERSION_PATCH' "$VERSION_FILE" | awk '{print $3}')
+
+        version="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+        echo "Parsed version: $version"
+
+        echo "version=$version" >> $GITHUB_OUTPUT
+
+    - name: setup-msbuild
+      uses: microsoft/setup-msbuild@v1.1
+
+    - run: msbuild ${{ github.event.repository.name }}.sln -t:rebuild -verbosity:diag -property:Configuration=Release -property:Platform=x64
+    - run: cp x64\Release\${{ github.event.repository.name }}.asi ${{ github.event.repository.name }}.asi
+
+    - uses: robinraju/release-downloader@v1.8
+      with:
+        repository: "ThirteenAG/Ultimate-ASI-Loader"
+        latest: true
+        fileName: "Ultimate-ASI-Loader_x64.zip"
+    - run: unzip Ultimate-ASI-Loader_x64.zip -d .\
+    - run: C:\msys64\usr\bin\wget.exe -O .\UltimateASILoader_LICENSE.md https://raw.githubusercontent.com/ThirteenAG/Ultimate-ASI-Loader/master/license
+    - run: cp .\dinput8.dll .\wininet.dll
+    - run: mv .\dinput8.dll .\winhttp.dll
+    - run: mkdir .\logs
+    - run: cp .\README.md .\logs\${{ github.event.repository.name }}.log
+    - run: mkdir .\plugins
+    - run: mv .\README.md .\plugins\${{ github.event.repository.name }}_README.md
+    - run: mv .\${{ github.event.repository.name }}.ini .\plugins\${{ github.event.repository.name }}.ini
+    - run: mv .\${{ github.event.repository.name }}.asi .\plugins\${{ github.event.repository.name }}.asi
+    - run: 7z a -tzip ${{ github.event.repository.name }}_${{ steps.extract_version.outputs.version }}.zip wininet.dll winhttp.dll UltimateASILoader_LICENSE.md
+    - run: 7z a ${{ github.event.repository.name }}_${{ steps.extract_version.outputs.version }}.zip plugins\
+    - run: 7z a ${{ github.event.repository.name }}_${{ steps.extract_version.outputs.version }}.zip logs\
+
+    - uses: ncipollo/release-action@v1
+      with:
+        artifacts: "${{ github.event.repository.name }}_${{ steps.extract_version.outputs.version }}.zip"
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ steps.extract_version.outputs.version }}
+        name: "${{ steps.extract_version.outputs.version }}"
+        draft: true
+        generateReleaseNotes: true
+        artifactErrorsFailBuild: true
