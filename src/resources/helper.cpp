@@ -1,24 +1,16 @@
+#include "helper.hpp"
 #include <spdlog/spdlog.h>
-
 
 #pragma comment(lib,"Version.lib")
 
-extern std::string foundPath;
 extern HMODULE baseModule;
 extern std::filesystem::path sExePath;
 extern std::filesystem::path sFixPath;
 extern std::string sExeName;
 
+
 namespace Memory
 {
-    template<typename T>
-    void Write(uintptr_t writeAddress, T value)
-    {
-        DWORD oldProtect;
-        VirtualProtect((LPVOID)(writeAddress), sizeof(T), PAGE_EXECUTE_WRITECOPY, &oldProtect);
-        *(reinterpret_cast<T*>(writeAddress)) = value;
-        VirtualProtect((LPVOID)(writeAddress), sizeof(T), oldProtect, &oldProtect);
-    }
 
     void PatchBytes(uintptr_t address, const char* pattern, unsigned int numBytes)
     {
@@ -27,7 +19,6 @@ namespace Memory
         memcpy((LPVOID)address, pattern, numBytes);
         VirtualProtect((LPVOID)address, numBytes, oldProtect, &oldProtect);
     }
-
    
     static HMODULE GetThisDllHandle()
     {
@@ -53,7 +44,7 @@ namespace Memory
 
     // CSGOSimple's pattern scan
     // https://github.com/OneshotGH/CSGOSimple-master/blob/master/CSGOSimple/helpers/utils.cpp
-    std::uint8_t* PatternScan(void* module, const char* signature)
+    std::uint8_t* PatternScanSilent(void* module, const char* signature)
     {
         static auto pattern_to_byte = [](const char* pattern) {
             auto bytes = std::vector<int>{};
@@ -99,9 +90,48 @@ namespace Memory
         return nullptr;
     }
 
+    std::uint8_t* PatternScan(void* module, const char* signature, const char* prefix, const char* successMessage, const char* errorMessage)
+    {
+        std::uint8_t* foundPattern = PatternScanSilent(module, signature);
+        if (foundPattern)
+        {
+            if (bVerboseLogging)
+            {
+                if (successMessage)
+                {
+                    spdlog::info("{} Address: {:s}+{:x}", successMessage, sExeName.c_str(), (uintptr_t)foundPattern - (uintptr_t)baseModule);
+
+                }
+                else
+                {
+                
+                    spdlog::info("{}: Pattern scan found. Address: {:s}+{:x}", prefix, sExeName.c_str(), (uintptr_t)foundPattern - (uintptr_t)baseModule);
+                }
+            }
+        }
+        else
+        {
+            if (errorMessage)
+            {
+                spdlog::error("{}", errorMessage);
+
+            }
+            else
+            {
+                spdlog::error("{}: Pattern scan failed.", prefix);
+            }
+        }
+        return foundPattern;
+    }
+
     uintptr_t GetAbsolute(uintptr_t address) noexcept
     {
         return (address + 4 + *reinterpret_cast<std::int32_t*>(address));
+    }
+
+    uintptr_t GetRelativeOffset(uint8_t* addr) noexcept
+    {
+        return reinterpret_cast<uintptr_t>(addr) + 4 + *reinterpret_cast<int32_t*>(addr);
     }
 
     BOOL HookIAT(HMODULE callerModule, char const* targetModule, const void* targetFunction, void* detourFunction)
@@ -143,15 +173,19 @@ namespace Memory
 
 namespace Util
 {
-    auto findStringInVector = [](std::string& str, const std::initializer_list<std::string>& search) -> int {
-        std::transform(str.begin(), str.end(), str.begin(),
-            [](unsigned char c) { return std::tolower(c); });
 
+    int findStringInVector(std::string& str, const std::initializer_list<std::string>& search)
+    {
+        std::transform(str.begin(), str.end(), str.begin(),
+            [](unsigned char c)
+            {
+                return std::tolower(c);
+            });
         auto it = std::find(search.begin(), search.end(), str);
         if (it != search.end())
-            return std::distance(search.begin(), it);
+            return (int)std::distance(search.begin(), it);
         return 0;
-        };
+    }
 
     // Convert an UTF8 string to a wide Unicode String
     std::wstring utf8_decode(const std::string& str)
@@ -163,10 +197,10 @@ namespace Util
         return wstrTo;
     }
 
-    std::pair<int, int> GetPhysicalDesktopDimensions() {
-        if (DEVMODE devMode{ .dmSize = sizeof(DEVMODE) }; EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &devMode))
+    std::pair<int, int> GetPhysicalDesktopDimensions()
+    {
+        if (DEVMODE devMode { .dmSize = sizeof(DEVMODE) }; EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &devMode))
             return { devMode.dmPelsWidth, devMode.dmPelsHeight };
-
         return {};
     }
 
@@ -204,33 +238,41 @@ namespace Util
         return "File description not found.";
     }
 
-
     ///Scans all valid ASI directories for any .asi files matching the fileName.
-    bool CheckForASIFiles(std::string fileName, bool checkForDuplicates, bool setFixPath)
+    bool CheckForASIFiles(std::string fileName, bool checkForDuplicates, bool setFixPath, const char* checkCreationDate)
     {
         std::array<std::string, 4> paths = { "", "plugins", "scripts", "update" };
         std::filesystem::path foundPath;
         for (const auto& path : paths)
         {
-            if (std::filesystem::exists(sExePath / path / (fileName + ".asi")))
+            auto filePath = sExePath / path / (fileName + ".asi");
+            if (std::filesystem::exists(filePath))
             {
-                if (!foundPath.empty()) //multiple versions found
+                if (checkCreationDate)
+                {
+                    auto fileTime = std::filesystem::last_write_time(filePath);
+                    auto fileTimeChrono = std::chrono::system_clock::to_time_t(std::chrono::clock_cast<std::chrono::system_clock>(fileTime));
+                    std::tm fileCreationTime = *std::localtime(&fileTimeChrono);
+                    std::tm checkDate = {};
+                    std::istringstream ss(checkCreationDate);
+                    ss >> std::get_time(&checkDate, "%Y-%m-%d");
+                    if (ss.fail() || std::mktime(&fileCreationTime) >= std::mktime(&checkDate))
+                    {
+                        continue; // Skip this file if it doesn't meet the creation date requirement
+                    }
+                }
+                if (!foundPath.empty()) // multiple versions found
                 {
                     AllocConsole();
                     FILE* dummy;
                     freopen_s(&dummy, "CONOUT$", "w", stdout);
                     std::string errorMessage = "DUPLICATE FILE ERROR: Duplicate " + fileName + ".asi installations found! Please make sure to delete any old versions!\n";
-                    if (foundPath == "\\")
-                    {
-                        foundPath = ""; //don't print the extra slash
-                    }
                     errorMessage.append("DUPLICATE FILE ERROR - Installation 1: ").append((sExePath / foundPath / (fileName + ".asi\n")).string());
                     errorMessage.append("DUPLICATE FILE ERROR - Installation 2: ").append((sExePath / path / (fileName + ".asi\n")).string());
-                    std::cout << errorMessage << std::endl;
+                    std::cout << errorMessage;
                     spdlog::error("{}", errorMessage);
                     FreeLibraryAndExitThread(baseModule, 1);
                 }
-
                 foundPath = path;
                 if (setFixPath)
                 {
@@ -245,16 +287,5 @@ namespace Util
         return FALSE;
     }
 
-}
-
-inline void**& GetVirtualTable(void* baseclass) {
-    return *reinterpret_cast<void***>(baseclass);
-}
-
-inline void* GetVirtualFunction(void* vftable, size_t index) {
-    return reinterpret_cast<void*>(GetVirtualTable(vftable)[index]);
-}
-
-template <typename Fn> inline Fn GetVirtualFunction(void* vftable, size_t index) {
-    return reinterpret_cast<Fn>(GetVirtualTable(vftable)[index]);
+    
 }
